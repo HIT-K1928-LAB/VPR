@@ -1,0 +1,69 @@
+# ----------------------------------------------------------------------------
+# BoQ-style sequential OT-GaussVLAD training config
+# x0 -> encoder1 -> transport head1, x1 -> encoder2 -> transport head2
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  train_image_size:
+    - 280
+    - 280
+  img_per_place: 4
+  batch_size: 40
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.sequential_ot_gaussvlad
+  class: SequentialOTGaussVLADLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    num_stages: 2
+    nheads: 8
+    transformer_ffn_ratio: 4
+    descriptor_dim: 8192
+    row_dim: 64
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    transformer_dropout: 0.0
+    mass_preserving: true
+    mass_power: 2
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+    fusion_dropout: 0.0
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0002
+  wd: 0.001
+  warmup: 3900
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1
