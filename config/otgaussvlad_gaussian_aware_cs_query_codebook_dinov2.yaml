@@ -1,0 +1,100 @@
+# ----------------------------------------------------------------------------
+# OT-GaussVLAD + W2 Gaussian-aware CS + self-attentive Gaussian codebook
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 20
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.ot_gaussvlad_gaussian_aware_cs_query_codebook
+  class: OTGaussVLADGaussianAwareCSQueryCodebookLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    mass_preserving: true
+    mass_power: 0.05
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+
+    # Query-structured Gaussian codebook for the OT branch.
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    # Gaussian-aware CS branch. Query-level diagonal Gaussians are matched
+    # against a reference Gaussian codebook with W2-style negative distance.
+    cs_num_queries: 256
+    cs_feature_dim: 64
+    cs_reference_dim: 128
+    cs_feature_nheads: 8
+    cs_reference_nheads: 8
+    cs_self_attn: true
+    cs_attn_dropout: 0.0
+    cs_intra_norm: true
+    cs_scale_mode: sqrt
+    gcs_reduce: sum_sqrt
+    gcs_center: true
+    gcs_score_scale_init: 0.1
+    gcs_sigma_weight_init: 1.0
+    gcs_learn_sigma_weight: true
+    gcs_log_sigma_bias: 0.0
+    gcs_log_sigma_scale: 2.0
+
+    # Keep descriptor shape and fusion behavior aligned with the current best
+    # CS query-codebook baseline for a clean ablation.
+    fusion_mode: cluster_fusion
+    fusion_dropout: 0.0
+    cs_fusion_init: 0.7
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0002
+  wd: 0.001
+  warmup: 3900
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1

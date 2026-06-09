@@ -71,8 +71,7 @@ class VPRDataModule(L.LightningDataModule):
         # check that the training dataset exists
         # its path is defined in the config/data/config.yaml file
         # let's call the config_manager to check this
-        self.train_set_path = config_manager.get_dataset_path(dataset_name=self.train_set_name, 
-                                                              dataset_type="train")
+        self.train_set_path = None  # resolved lazily for training only
         
         # check that the validation datasets exist
         # theirs paths are defined in the config/data/config.yaml file
@@ -149,10 +148,19 @@ class VPRDataModule(L.LightningDataModule):
             val_dataloaders.append(dl)
         return val_dataloaders
     
+    def test_dataloader(self):
+        return self.val_dataloader()
+
     def _get_train_dataset(self):
         hard_mining = False
         if self.batch_sampler is not None:
             hard_mining = True
+
+        if self.train_set_path is None:
+            self.train_set_path = config_manager.get_dataset_path(
+                dataset_name=self.train_set_name,
+                dataset_type="train",
+            )
 
         return GSVCitiesDataset(
             dataset_path=self.train_set_path,
@@ -169,7 +177,7 @@ class VPRDataModule(L.LightningDataModule):
                     dataset_path=self.val_set_paths[ds_name],
                     input_transform=self.val_transform
             )
-        elif "pitts30k" in ds_name.lower():
+        elif "pitts30k" in ds_name.lower() or "pitts250k" in ds_name.lower():
             return PittsburghDataset(
                     dataset_path=self.val_set_paths[ds_name],
                     input_transform=self.val_transform

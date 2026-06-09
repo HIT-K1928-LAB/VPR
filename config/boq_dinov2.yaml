@@ -11,10 +11,10 @@
 datamodule:
   train_set_name: "gsv-cities" # use "gsv-cities" if you have downloaded the full dataset
   train_image_size: 
-    - 280
-    - 280
+    - 322
+    - 322
   img_per_place: 4
-  batch_size: 160
+  batch_size: 40
   num_workers: 8
   val_image_size: 
     - 322

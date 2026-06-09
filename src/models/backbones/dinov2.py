@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from pathlib import Path
 
 
 class DinoV2(nn.Module):
@@ -36,7 +37,11 @@ class DinoV2(nn.Module):
                              f"Supported backbones are: {self.AVAILABLE_MODELS}")
                              
                 
-        self.dino = torch.hub.load('facebookresearch/dinov2', self.backbone_name)
+        hub_repo = Path(torch.hub.get_dir()) / "facebookresearch_dinov2_main"
+        if hub_repo.exists():
+            self.dino = torch.hub.load(str(hub_repo), self.backbone_name, source="local")
+        else:
+            self.dino = torch.hub.load('facebookresearch/dinov2', self.backbone_name)
         
         # freeze the patch embedding and positional encoding
         self.dino.patch_embed.requires_grad_(False)

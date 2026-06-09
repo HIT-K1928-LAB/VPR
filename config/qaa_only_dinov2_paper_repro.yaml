@@ -1,0 +1,83 @@
+# ----------------------------------------------------------------------------
+# QAA DinoV2 paper-style reproduction config for OpenVPRLab
+# ----------------------------------------------------------------------------
+# Target from QAA paper:
+#   DINOv2-B/14 + QAA, Nq=256, Cf=64, Cr=128, Cd=8192,
+#   train 224x224, eval 322x322, fine-tune last 2 DINOv2 blocks.
+#
+# Important limitation:
+#   The paper's Pitts250k-test R@1=96.6 uses GSV-Cities + MSLS + SF-XL
+#   joint training with Clique Mining. This OpenVPRLab config uses the
+#   repository's standard single-training-set GSV-Cities pipeline, so it
+#   aligns the model/training hyperparameters but not the full data recipe.
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 224
+    - 224
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  # Paper joint training uses k=30 places per dataset over 3 datasets:
+  # 90 places and 360 images per step. In OpenVPRLab this is a single
+  # GSV-Cities batch of 90 places.
+  batch_size: 90
+  num_workers: 4
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: true
+
+aggregator:
+  module: src.models.aggregators.qaa_only
+  class: QAAOnlyLayer
+  params:
+    in_channels: 768
+    # QAA notation: Cf=num_clusters=64, Cr=cluster_dim=128.
+    # Descriptor dimension Cd = Cf * Cr = 8192.
+    num_clusters: 64
+    cluster_dim: 128
+    token_dim: 0
+    dropout: 0.3
+    num_queries: 256
+    self_attn: "both"
+    dust_bin: true
+    feature_nheads: 16
+    score_nheads: 16
+    attn_arch: "conv"
+    skip_connection: "none"
+    out_norm: false
+    self_attn_out_norm: true
+    score_norm: "none"
+    intra_norm: true
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  # QAA paper uses lr=4e-5 for aggregation and backbone_lr=8e-6.
+  # OpenVPRLab currently uses one LR for both backbone and aggregator;
+  # this keeps the paper aggregation LR.
+  lr: 0.00004
+  wd: 0.001
+  warmup: 4000
+  max_epochs: 80
+  milestones:
+    - 80
+  lr_mult: 0.1

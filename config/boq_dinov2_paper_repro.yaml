@@ -1,0 +1,65 @@
+# ----------------------------------------------------------------------------
+# BoQ DinoV2 paper-style reproduction config
+# ----------------------------------------------------------------------------
+# Target setup: DinoV2-BoQ in the BoQ paper / released model setting.
+# Paper notes: train on GSV-Cities, resize train images to 280x280, evaluate
+# at 322x322, fine-tune only the last two DINOv2 blocks.
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  # Paper uses large batches of places. 120 places means 480 images/step.
+  # If this OOMs, lower to 80 or 40 and keep the rest unchanged for an ablation.
+  batch_size: 120
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators
+  class: BoQ
+  params:
+    in_channels:
+    # Released DinoV2-BoQ model uses proj_channels=384 and output_dim=12288.
+    # OpenVPRLab BoQ output is proj_channels * row_dim = 384 * 32.
+    proj_channels: 384
+    num_queries: 64
+    num_layers: 2
+    row_dim: 32
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0002
+  wd: 0.001
+  # OpenVPRLab warmup is measured in optimization steps, not epochs.
+  # With GSV-Cities and batch_size=120 this is roughly 3 epochs.
+  warmup: 1500
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.3

@@ -1,0 +1,97 @@
+# ----------------------------------------------------------------------------
+# OT-GaussVLAD + CS + self-attentive Gaussian codebook Pitts test
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 40
+  num_workers: 8
+  val_set_names:
+    - "pitts30k-test"
+    - "pitts250k-test"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.ot_gaussvlad_cs_query_codebook
+  class: OTGaussVLADCSQueryCodebookLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    mass_preserving: true
+    mass_power: 0.05
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+
+    # Query-structured Gaussian codebook. The generated residual is global,
+    # bounded, and zero-initialized through the heads for a conservative start.
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    # QAA-style CS side branch. These defaults align the CS matrix
+    # [Cr=128, Cf=64] with the OT residual shape [K=64, 2D=128].
+    cs_num_queries: 256
+    cs_feature_dim: 64
+    cs_reference_dim: 128
+    cs_feature_nheads: 8
+    cs_reference_nheads: 8
+    cs_self_attn: true
+    cs_attn_dropout: 0.0
+    cs_intra_norm: true
+    cs_scale_mode: sqrt
+
+    # Initializes as OT + 0.1 * CS per cluster, preserving OT-GaussVLAD v2
+    # behavior at the start of training while letting CS learn in.
+    fusion_mode: cluster_fusion
+    fusion_dropout: 0.0
+    cs_fusion_init: 0.2
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0001
+  wd: 0.001
+  warmup: 1500
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1
+
+train: false
+ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/OTGaussVLADCSQueryCodebookLayer/version_2/checkpoints/epoch(02)_step(4689)_R1[0.9257]_R5[0.9635].ckpt

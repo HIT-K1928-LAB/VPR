@@ -20,6 +20,8 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument('--silent', action='store_true', help='Disable verbose output')
     parser.add_argument('--compile', action='store_true', help='Compile the model using torch.compile()')
     parser.add_argument('--dev', action='store_true', help='Enable fast development run')
+    parser.add_argument('--test', action='store_true', help='Run evaluation instead of training')
+    parser.add_argument('--ckpt_path', type=str, help='Path to a checkpoint for evaluation')
     parser.add_argument('--display_theme', type=str, help='Theme for the console display')
 
     # Datamodule arguments
@@ -76,6 +78,7 @@ def update_config_with_args_and_defaults(config: Dict[str, Any], args: argparse.
         'dev': False,
         'display_theme': "default",
         'train': True,
+        'ckpt_path': None,
         'datamodule': {
             'train_set_name': "gsv-cities-light",
             'cities': "all",
@@ -180,6 +183,10 @@ def update_config_with_args_and_defaults(config: Dict[str, Any], args: argparse.
         config['dev'] = arg_dict['dev']
     if arg_dict['train']:
         config['train'] = arg_dict['train']
+    if arg_dict['test']:
+        config['train'] = False
+    if arg_dict['ckpt_path'] is not None:
+        config['ckpt_path'] = arg_dict['ckpt_path']
 
     return config
 

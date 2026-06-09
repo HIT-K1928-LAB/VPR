@@ -205,79 +205,87 @@ class VPRFramework(L.LightningModule):
     ########################################################
     ################ Validation loop starts here ###########
     ########################################################
+    def _extract_descriptors(self, model_output):
+        if isinstance(model_output, tuple) or isinstance(model_output, list):
+            return model_output[0]
+        return model_output
+
+    def _append_eval_output(self, storage, dataloader_idx, descriptors):
+        if dataloader_idx not in storage:
+            storage[dataloader_idx] = []
+        storage[dataloader_idx].append(descriptors.detach().cpu().numpy())
+
     def on_validation_epoch_start(self):
         """
         Actions to perform at the start of each validation epoch.
         """
-        # we init an empty dictionary to store the descriptors for each dataloader
         self.validation_step_outputs = {}
 
-    # At each iteration, we compute the output descriptors
+    def on_test_epoch_start(self):
+        """
+        Actions to perform at the start of each test epoch.
+        """
+        self.test_step_outputs = {}
+
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """
         Validation step for each batch.
-
-        Args:
-            batch: Input batch.
-            batch_idx: Batch index.
-            dataloader_idx: Index of the dataloader.
-
-        Returns:
-            None
         """
         images, labels = batch
-        model_output = self(images)
-        
-        # sometimes the model returns a list, sometimes a single tensor
-        # for example, BoQ returns [descriptors, attentions]
-        # but netvlad, mixvpr and many others return only descriptors
-        # so we check if the model output is a list or a single tensor
-        if isinstance(model_output, tuple) or isinstance(model_output, list):
-            descriptors = model_output[0]
-        else:
-            descriptors = model_output
-            
-        descriptors = descriptors.detach().cpu().numpy()
+        descriptors = self._extract_descriptors(self(images))
+        self._append_eval_output(self.validation_step_outputs, dataloader_idx, descriptors)
 
-        if dataloader_idx not in self.validation_step_outputs:
-            # initialize the list of descriptors for this dataloader
-            self.validation_step_outputs[dataloader_idx] = []
-        # save the descriptors to compute the recall@k at the end of the validation epoch
-        self.validation_step_outputs[dataloader_idx].append(descriptors)
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        """
+        Test step for each batch.
+        """
+        images, labels = batch
+        descriptors = self._extract_descriptors(self(images))
+        self._append_eval_output(self.test_step_outputs, dataloader_idx, descriptors)
 
-    # At the end of the validation epoch, we compute the recall@k
-    def on_validation_epoch_end(self):
-        """
-        Actions to perform at the end of each validation epoch.
-        """
+    def _finalize_eval(self, outputs, k_values, title):
         dm = self.trainer.datamodule
-        list_of_recalls = [] # one list for each validation set
-        for dataloader_idx, descriptors_list in self.validation_step_outputs.items():
+        list_of_recalls = []
+        for dataloader_idx, descriptors_list in outputs.items():
             descriptors = np.concatenate(descriptors_list, axis=0)
             dataset = dm.val_datasets[dataloader_idx]
 
             if self.trainer.fast_dev_run:
-                # skip the recall computation for fast dev runs
                 if dataloader_idx == 0:
                     print("\nFast dev run: skipping recall@k computation\n")
-            else:
-                # we will use the descriptors, the number of references, number of queries, and the ground truth
-                # NOTE: make sure these are available in the dataset object and ARE IN THE RIGHT ORDER.
-                # meaning that the first `num_references` descriptors are reference images and the rest are query images
-                recalls_dict = utils.compute_recall_performance(
-                        descriptors, 
-                        dataset.num_references,
-                        dataset.num_queries,
-                        dataset.ground_truth,
-                        k_values=[1, 5, 10, 15]
-                )
-                recalls_log = {
-                    f"{dm.val_set_names[dataloader_idx]}/R1": recalls_dict[1],
-                    f"{dm.val_set_names[dataloader_idx]}/R5": recalls_dict[5],
-                }
-                self.log_dict(recalls_log, prog_bar=False, logger=True)
-                list_of_recalls.append(recalls_dict)
+                continue
+
+            recalls_dict = utils.compute_recall_performance(
+                descriptors,
+                dataset.num_references,
+                dataset.num_queries,
+                dataset.ground_truth,
+                k_values=k_values,
+            )
+            recalls_log = {f"{dm.val_set_names[dataloader_idx]}/R{k}": recalls_dict[k] for k in k_values}
+            self.log_dict(recalls_log, prog_bar=False, logger=True)
+            list_of_recalls.append(recalls_dict)
 
         if self.verbose:
-            utils.display_recall_performance(list_of_recalls, dm.val_set_names)
-        self.validation_step_outputs.clear()
+            utils.display_recall_performance(list_of_recalls, dm.val_set_names, title=title)
+        outputs.clear()
+
+    def on_validation_epoch_end(self):
+        """
+        Actions to perform at the end of each validation epoch.
+        """
+        self._finalize_eval(
+            self.validation_step_outputs,
+            k_values=[1, 5, 10, 15],
+            title="Validation Recall@k Performance",
+        )
+
+    def on_test_epoch_end(self):
+        """
+        Actions to perform at the end of each test epoch.
+        """
+        self._finalize_eval(
+            self.test_step_outputs,
+            k_values=[1, 5, 10, 15, 20],
+            title="Test Recall@k Performance",
+        )

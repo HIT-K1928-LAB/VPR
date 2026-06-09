@@ -1,18 +1,22 @@
 # ----------------------------------------------------------------------------
-# Low-rank plus diagonal OT-GaussVLAD training config
+# Pure QAA Pitts test config
 # ----------------------------------------------------------------------------
 
 datamodule:
   train_set_name: "gsv-cities"
+  cities: "all"
   train_image_size:
     - 280
     - 280
+  val_image_size:
+    - 322
+    - 322
   img_per_place: 4
   batch_size: 40
   num_workers: 8
   val_set_names:
-    - "msls-val"
-    - "pitts30k-val"
+    - "pitts30k-test"
+    - "pitts250k-test"
 
 backbone:
   module: src.models.backbones
@@ -23,27 +27,25 @@ backbone:
     return_cls_token: false
 
 aggregator:
-  module: src.models.aggregators.lowrank_ot_gaussvlad
-  class: LowRankOTGaussVLADLayer
+  module: src.models.aggregators.qaa_only
+  class: QAAOnlyLayer
   params:
     in_channels: 768
     num_clusters: 64
-    cluster_dim: 64
-    hidden_channels: 768
-    covariance_rank: 6
-    descriptor_dim: 10496
-    score_mode: lowrank_gmm
-    include_pi_in_scores: false
-    sinkhorn_iters: 3
-    dustbin_mass: 0.05
+    cluster_dim: 128
+    token_dim: 0
     dropout: 0.0
-    mass_preserving: true
-    mass_power: 0.5
-    token_mass_mode: learned
-    token_mass_hidden_channels: 64
-    factor_scale_init: 0.05
-    lowrank_residual_mode: sqrt
-    lowrank_residual_weight_init: 0.5
+    num_queries: 256
+    self_attn: "both"
+    dust_bin: true
+    feature_nheads: 8
+    score_nheads: 8
+    attn_arch: "conv"
+    skip_connection: "none"
+    out_norm: true
+    self_attn_out_norm: true
+    score_norm: "ot"
+    intra_norm: true
     eps: 1e-6
 
 loss_function:
@@ -55,12 +57,15 @@ loss_function:
 
 trainer:
   optimizer: adamw
-  lr: 0.0002
+  lr: 0.0001
   wd: 0.001
-  warmup: 3900
+  warmup: 6000
   max_epochs: 40
   milestones:
     - 10
     - 20
     - 30
   lr_mult: 0.1
+
+train: false
+ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/QAAOnlyLayer/version_0/checkpoints/epoch(22)_step(35949)_R1[0.9311]_R5[0.9595].ckpt

@@ -1,13 +1,16 @@
 # ----------------------------------------------------------------------------
-# BoQ-style sequential OT-GaussVLAD training config
-# x0 -> encoder1 -> transport head1, x1 -> encoder2 -> transport head2
+# OT-anchored Residual Cross-query Gaussian Refinement
 # ----------------------------------------------------------------------------
 
 datamodule:
   train_set_name: "gsv-cities"
+  cities: "all"
   train_image_size:
     - 280
     - 280
+  val_image_size:
+    - 322
+    - 322
   img_per_place: 4
   batch_size: 40
   num_workers: 8
@@ -24,29 +27,47 @@ backbone:
     return_cls_token: false
 
 aggregator:
-  module: src.models.aggregators.sequential_ot_gaussvlad
-  class: SequentialOTGaussVLADLayer
+  module: src.models.aggregators.ot_gaussvlad_residual_cq_refine_gaussian
+  class: OTGaussVLADResidualCQRefineGaussianLayer
   params:
     in_channels: 768
     num_clusters: 64
     cluster_dim: 64
     hidden_channels: 768
-    num_stages: 2
-    nheads: 8
-    transformer_ffn_ratio: 4
-    descriptor_dim: 8192
-    row_dim: 64
     score_mode: gmm
     include_pi_in_scores: false
     sinkhorn_iters: 3
     dustbin_mass: 0.05
     dropout: 0.0
-    transformer_dropout: 0.0
     mass_preserving: true
-    mass_power: 1.5
+    mass_power: 0.05
     token_mass_mode: learned
     token_mass_hidden_channels: 64
-    fusion_dropout: 0.0
+
+    # Self-attentive Gaussian codebook from the current strongest branch.
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    # OT-anchored residual cross-query refinement.
+    # r_final = r_ot + alpha * r_refine, alpha starts at 0.05.
+    residual_num_queries: 256
+    residual_query_nheads: 8
+    residual_reference_nheads: 8
+    residual_self_attn: true
+    residual_attn_dropout: 0.0
+    residual_input_norm: true
+    use_cluster_embedding: true
+    cluster_embedding_init_std: 0.02
+    refine_scale_init: 0.05
+    refine_max_scale: 1.0
+    refine_tanh: true
+    refine_scale_mode: sqrt
     eps: 1e-6
 
 loss_function:
@@ -58,9 +79,9 @@ loss_function:
 
 trainer:
   optimizer: adamw
-  lr: 0.0002
+  lr: 0.0001
   wd: 0.001
-  warmup: 3900
+  warmup: 3000
   max_epochs: 40
   milestones:
     - 10

@@ -1,0 +1,67 @@
+aggregator:
+  class: LowRankOTGaussVLADLayer
+  module: src.models.aggregators.lowrank_ot_gaussvlad
+  params:
+    cluster_dim: 64
+    covariance_rank: 6
+    descriptor_dim: 10496
+    dropout: 0.0
+    dustbin_mass: 0.05
+    eps: 1e-6
+    factor_scale_init: 0.05
+    hidden_channels: 768
+    in_channels: 768
+    include_pi_in_scores: false
+    lowrank_residual_mode: sqrt
+    lowrank_residual_weight_init: 0.5
+    mass_power: 0.5
+    mass_preserving: true
+    num_clusters: 64
+    score_mode: lowrank_gmm
+    sinkhorn_iters: 3
+    token_mass_hidden_channels: 64
+    token_mass_mode: learned
+backbone:
+  class: DinoV2
+  module: src.models.backbones
+  params:
+    backbone_name: dinov2_vitb14
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+compile: false
+datamodule:
+  batch_size: 40
+  cities: all
+  img_per_place: 4
+  num_workers: 8
+  train_image_size:
+  - 280
+  - 280
+  train_set_name: gsv-cities
+  val_image_size: null
+  val_set_names:
+  - pitts30k-test
+  - pitts250k-test
+dev: false
+display_theme: default
+loss_function:
+  class: VPRLossFunction
+  module: src.losses
+  params:
+    loss_fn_name: MultiSimilarityLoss
+    miner_name: MultiSimilarityMiner
+seed: 42
+silent: false
+train: false
+trainer:
+  lr: 0.0002
+  lr_mult: 0.1
+  max_epochs: 40
+  milestones:
+  - 10
+  - 20
+  - 30
+  optimizer: adamw
+  warmup: 3900
+  wd: 0.001
+ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/LowRankOTGaussVLADLayer/version_6/checkpoints/epoch(15)_step(25008)_R1[0.9297]_R5[0.9622].ckpt

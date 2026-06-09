@@ -1,0 +1,82 @@
+# ----------------------------------------------------------------------------
+# QAA-style Gaussian residual aggregation
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 40
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.qaa_gaussian_residual
+  class: QAAGaussianResidualLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    gaussian_dim: 64
+    num_queries: 256
+    image_query_dim: 768
+    reference_query_dim: 64
+    image_nheads: 8
+    reference_nheads: 8
+    image_self_attn: true
+    reference_self_attn: true
+    attn_dropout: 0.0
+    dropout: 0.0
+
+    # W2-to-reference assignment. OT keeps the QAA-style balanced assignment,
+    # while softmax/query_softmax are useful follow-up ablations.
+    assignment_norm: ot
+    sinkhorn_iters: 3
+    dust_bin: true
+    score_scale_init: 5.0
+    sigma_weight_init: 1.0
+    learn_sigma_weight: true
+    log_sigma_bias: 0.0
+    log_sigma_scale: 2.0
+
+    # Residual construction:
+    # [mu_hat - mu_ref, sigma_hat - sigma_ref] -> [B, 64, 128] -> 8192.
+    aggregate_sigma: moment
+    residual_intra_norm: true
+    mass_preserving: true
+    mass_power: 0.05
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0001
+  wd: 0.001
+  warmup: 6000
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1

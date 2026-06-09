@@ -1,0 +1,90 @@
+# ----------------------------------------------------------------------------
+# Residual Cross-query Gaussian Aggregation
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 40
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.ot_gaussvlad_residual_cross_query_gaussian
+  class: OTGaussVLADResidualCrossQueryGaussianLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    mass_preserving: true
+    mass_power: 0.05
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+
+    # Global self-attentive Gaussian codebook inherited from the current
+    # best-performing query-codebook OT-GaussVLAD branch.
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    # Residual Cross-query Gaussian Aggregation.
+    # r_ot: [B, K=64, 2D=128]
+    # residual queries read r_ot and produce S: [B, Cr=128, Cf=64].
+    residual_num_queries: 256
+    residual_feature_dim: 64
+    residual_reference_dim: 128
+    residual_query_nheads: 8
+    residual_reference_nheads: 8
+    residual_self_attn: true
+    residual_attn_dropout: 0.0
+    residual_intra_norm: true
+    residual_scale_mode: sqrt
+    residual_input_norm: true
+    eps: 1e-6
+
+loss_function:
+  module: src.losses
+  class: VPRLossFunction
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+trainer:
+  optimizer: adamw
+  lr: 0.0001
+  wd: 0.001
+  warmup: 3000
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1

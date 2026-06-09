@@ -13,6 +13,7 @@ from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.callbacks import RichProgressBar, ModelCheckpoint
 from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
 from lightning.pytorch.loggers import TensorBoardLogger
+from pathlib import Path
 from src.core.vpr_datamodule import VPRDataModule
 from src.core.vpr_framework import VPRFramework
 from src.losses.vpr_losses import VPRLossFunction
@@ -180,18 +181,85 @@ def train(config):
     trainer.fit(model=vpr_model, datamodule=datamodule)
 
 def evaluate(config):
-    print("Evaluation mode selected.")
-    # Your evaluation logic here
+    seed_everything(config["seed"], workers=True)
+    torch.backends.cuda.sdp_kernel(enable_flash=True, enable_mem_efficient=True)
+    torch.backends.cuda.enable_flash_sdp(True)
+
+    ckpt_path = config.get("ckpt_path")
+    if not ckpt_path:
+        raise ValueError("Please provide --ckpt_path when running in test mode.")
+    ckpt_path = Path(ckpt_path)
+    if not ckpt_path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+
+    datamodule = VPRDataModule(
+        train_set_name=config['datamodule']['train_set_name'],
+        cities=config['datamodule']['cities'],
+        train_image_size=config['datamodule']['train_image_size'],
+        batch_size=config['datamodule']['batch_size'],
+        img_per_place=config['datamodule']['img_per_place'],
+        random_sample_from_each_place=True,
+        shuffle_all=False,
+        num_workers=config['datamodule']['num_workers'],
+        batch_sampler=None,
+        mean_std=IMAGENET_MEAN_STD,
+        val_set_names=config['datamodule']['val_set_names'],
+        val_image_size=config['datamodule']['val_image_size'],
+    )
+
+    backbone = get_instance(config['backbone']['module'], config['backbone']['class'], config['backbone']['params'])
+    out_channels = backbone.out_channels
+    if 'in_channels' in config['aggregator']['params'] and config['aggregator']['params']['in_channels'] is None:
+        config['aggregator']['params']['in_channels'] = out_channels
+
+    aggregator = get_instance(config['aggregator']['module'], config['aggregator']['class'], config['aggregator']['params'])
+    loss_function = get_instance(config['loss_function']['module'], config['loss_function']['class'], config['loss_function']['params'])
+
+    vpr_model = VPRFramework(
+        backbone=backbone,
+        aggregator=aggregator,
+        loss_function=loss_function,
+        optimizer=config['trainer']['optimizer'],
+        lr=config['trainer']['lr'],
+        weight_decay=config['trainer']['wd'],
+        warmup_steps=config['trainer']['warmup'],
+        milestones=config['trainer']['milestones'],
+        lr_mult=config['trainer']['lr_mult'],
+        verbose=not config["silent"],
+        config_dict=config,
+    )
+
+    if config["compile"]:
+        vpr_model = torch.compile(vpr_model)
+
+    tensorboard_logger = TensorBoardLogger(
+        save_dir=f"./logs/{backbone.backbone_name}",
+        name=f"{aggregator.__class__.__name__}_test",
+        default_hp_metric=False,
+    )
+
+    trainer = Trainer(
+        accelerator="gpu",
+        devices=[0],
+        logger=tensorboard_logger,
+        num_sanity_val_steps=0,
+        precision="16-mixed",
+        callbacks=[],
+        enable_model_summary=False,
+    )
+
+    results = trainer.test(model=vpr_model, datamodule=datamodule, ckpt_path=str(ckpt_path))
+    if not config["silent"]:
+        print(results)
+    return results
 
 def main():
     from argparser import parse_args
     config = parse_args()
     if config["train"]:
         train(config)
-    # elif args.test:
-        # evaluate(args, config)
-    # else:
-        # parser.print_help()
+    else:
+        evaluate(config)
 
 if __name__ == "__main__":
     main()

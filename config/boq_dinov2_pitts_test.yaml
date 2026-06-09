@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Low-rank plus diagonal OT-GaussVLAD training config
+# BoQ Pitts test config
 # ----------------------------------------------------------------------------
 
 datamodule:
@@ -7,12 +7,15 @@ datamodule:
   train_image_size:
     - 280
     - 280
+  val_image_size:
+    - 322
+    - 322
   img_per_place: 4
   batch_size: 40
   num_workers: 8
   val_set_names:
-    - "msls-val"
-    - "pitts30k-val"
+    - "pitts30k-test"
+    - "pitts250k-test"
 
 backbone:
   module: src.models.backbones
@@ -20,31 +23,16 @@ backbone:
   params:
     backbone_name: "dinov2_vitb14"
     num_unfrozen_blocks: 2
-    return_cls_token: false
 
 aggregator:
-  module: src.models.aggregators.lowrank_ot_gaussvlad
-  class: LowRankOTGaussVLADLayer
+  module: src.models.aggregators
+  class: BoQ
   params:
-    in_channels: 768
-    num_clusters: 64
-    cluster_dim: 64
-    hidden_channels: 768
-    covariance_rank: 6
-    descriptor_dim: 10496
-    score_mode: lowrank_gmm
-    include_pi_in_scores: false
-    sinkhorn_iters: 3
-    dustbin_mass: 0.05
-    dropout: 0.0
-    mass_preserving: true
-    mass_power: 0.5
-    token_mass_mode: learned
-    token_mass_hidden_channels: 64
-    factor_scale_init: 0.05
-    lowrank_residual_mode: sqrt
-    lowrank_residual_weight_init: 0.5
-    eps: 1e-6
+    in_channels:
+    proj_channels: 384
+    num_queries: 64
+    num_layers: 2
+    row_dim: 32
 
 loss_function:
   module: src.losses
@@ -64,3 +52,6 @@ trainer:
     - 20
     - 30
   lr_mult: 0.1
+
+train: false
+ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/BoQ/version_1/checkpoints/epoch(12)_step(10166)_R1[0.9270]_R5[0.9568].ckpt

@@ -1,12 +1,16 @@
 # ----------------------------------------------------------------------------
-# Low-rank plus diagonal OT-GaussVLAD training config
+# OT-GaussVLAD + Gaussian-aware CS with adaptive cluster fusion
 # ----------------------------------------------------------------------------
 
 datamodule:
   train_set_name: "gsv-cities"
+  cities: "all"
   train_image_size:
     - 280
     - 280
+  val_image_size:
+    - 322
+    - 322
   img_per_place: 4
   batch_size: 40
   num_workers: 8
@@ -23,27 +27,49 @@ backbone:
     return_cls_token: false
 
 aggregator:
-  module: src.models.aggregators.lowrank_ot_gaussvlad
-  class: LowRankOTGaussVLADLayer
+  module: src.models.aggregators.ot_gaussvlad_gaussian_cs_adaptive_fusion
+  class: OTGaussVLADGaussianCSAdaptiveFusionLayer
   params:
     in_channels: 768
     num_clusters: 64
     cluster_dim: 64
     hidden_channels: 768
-    covariance_rank: 6
-    descriptor_dim: 10496
-    score_mode: lowrank_gmm
+    descriptor_dim: 8192
+    score_mode: gmm
     include_pi_in_scores: false
     sinkhorn_iters: 3
     dustbin_mass: 0.05
     dropout: 0.0
     mass_preserving: true
-    mass_power: 0.5
+    mass_power: 1.0
     token_mass_mode: learned
     token_mass_hidden_channels: 64
-    factor_scale_init: 0.05
-    lowrank_residual_mode: sqrt
-    lowrank_residual_weight_init: 0.5
+
+    # Gaussian-aware CS branch.
+    gcs_num_queries: 128
+    gcs_feature_dim: 64
+    gcs_reference_dim: 128
+    gcs_feature_nheads: 8
+    gcs_reference_nheads: 8
+    gcs_self_attn: true
+    gcs_attn_dropout: 0.0
+    gcs_metric: w2
+    gcs_reduce: mean
+    gcs_intra_norm: true
+    gcs_score_scale_init: 1.0
+    gcs_sigma_weight_init: 1.0
+    gcs_learn_sigma_weight: true
+    gcs_natural_normalize: true
+    gcs_hybrid_natural_init: 0.5
+    gcs_log_sigma_bias: 0.0
+    gcs_log_sigma_scale: 2.0
+
+    # Adaptive cluster-wise fusion:
+    # r_k = r_ot_k + g_k * r_gcs_k
+    adaptive_gate_hidden_dim: 64
+    adaptive_gate_dropout: 0.0
+    adaptive_gate_init: 0.1
+    adaptive_gate_temperature: 1.0
     eps: 1e-6
 
 loss_function:
@@ -55,9 +81,9 @@ loss_function:
 
 trainer:
   optimizer: adamw
-  lr: 0.0002
+  lr: 0.0001
   wd: 0.001
-  warmup: 3900
+  warmup: 1500
   max_epochs: 40
   milestones:
     - 10
