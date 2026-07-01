@@ -22,8 +22,26 @@ logs/
 # VS Code
 .vscode/
 
+# Codex local files
+.codex
+.codex_write_probe*
+
 # Cache files
 .cache/
 
+# LaTeX build outputs
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+missfont.log
+
 # Ignore the data config file changes
-config/data/config.yaml 
+config/data/config.yaml

@@ -51,6 +51,9 @@ def compute_recall_performance(
         descriptors
     ), "Number of references and queries do not match the number of descriptors. THERE IS A BUG!"
 
+    if num_queries == 0:
+        return {k: float("nan") for k in k_values}
+
     embed_size = descriptors.shape[1]
     faiss_index = faiss.IndexFlatL2(embed_size)
     # faiss_index = faiss.IndexFlatIP(embed_size)

@@ -94,4 +94,4 @@ trainer:
   lr_mult: 0.1
 
 train: false
-ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/OTGaussVLADCSQueryCodebookLayer/version_2/checkpoints/epoch(02)_step(4689)_R1[0.9257]_R5[0.9635].ckpt
+ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/OTGaussVLADCSQueryCodebookLayer/version_12/checkpoints/epoch(05)_step(6252)_R1[0.9338]_R5[0.9649].ckpt

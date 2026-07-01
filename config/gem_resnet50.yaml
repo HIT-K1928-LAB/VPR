@@ -9,7 +9,7 @@
 # Datamodule Configuration
 #---------------------------------------------------
 datamodule:
-  train_set_name: "gsv-cities-light" # use "gsv-cities" if you have downloaded the full dataset
+  train_set_name: "gsv-cities" # use "gsv-cities" if you have downloaded the full dataset
   train_image_size: 
     - 320
     - 320

@@ -1,0 +1,124 @@
+# ----------------------------------------------------------------------------
+# OT-GaussVLAD + OT-anchored refine + uncertainty-aware geometric distillation
+# ----------------------------------------------------------------------------
+#
+# This config does not change the aggregator implementation. It fine-tunes the
+# existing global descriptor so that descriptor similarities imitate a geometric
+# re-ranking teacher. The teacher cache should be produced offline from local
+# matching/RANSAC and should contain label-pair scores plus inlier counts.
+
+seed: 42
+silent: false
+compile: false
+dev: false
+display_theme: "default"
+train: true
+
+# Used only by run_geometry_distill.py. It initializes model weights without
+# modifying the original training script or aggregator code.
+init_ckpt_path: /root/code/global/OpenVPRLab/logs/dinov2_vitb14/OTGaussVLADGaussianQueryCodebookOTAnchoredRefineLayer/version_0/checkpoints/epoch(09)_step(10420)_R1[0.9324]_R5[0.9635].ckpt
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 40
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.ot_gaussvlad_gaussian_query_codebook_ot_anchored_refine
+  class: OTGaussVLADGaussianQueryCodebookOTAnchoredRefineLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    mass_preserving: true
+    mass_power: 0.05
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    estimate_refine_dim: 64
+    estimate_refine_nheads: 4
+    estimate_refine_dropout: 0.0
+    estimate_refine_mlp_ratio: 2.0
+    estimate_refine_use_ffn: true
+    estimate_refine_delta_tanh: true
+    estimate_refine_mu_scale_init: 0.1
+    estimate_refine_sigma_scale_init: 0.1
+    estimate_refine_max_residual_scale: 1.0
+
+    eps: 1e-6
+
+loss_function:
+  module: src.losses.geometry_uncertainty_distillation
+  class: GeometryUncertaintyDistillationLoss
+  params:
+    base_loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+
+    # Replace this path after generating local-feature geometric teacher scores.
+    # CSV columns can be: query_label,candidate_label,geo_score,inliers
+    # If null, only same-label positives are used as a fallback, so no real
+    # geometric teacher is applied.
+    teacher_path:  /root/code/global/OpenVPRLab/data/geo_teacher/gsv_cities_geo_teacher.csv
+
+    # Joint objective: L = 1 * L_base + 0.05 * L_geoKD.
+    base_loss_weight: 1.0
+    distill_weight: 0.05
+    teacher_temperature: 0.07
+    student_temperature: 0.07
+
+    # Inlier-count uncertainty model. Pairs with few inliers are unreliable
+    # and contribute little or nothing to the distillation term.
+    inlier_threshold: 30.0
+    inlier_temperature: 6.0
+    min_reliable_inliers: 15.0
+
+    positive_fallback: true
+    positive_fallback_score: 1.0
+    positive_fallback_inliers: 50.0
+    symmetric_teacher: true
+    max_teacher_pairs: null
+
+trainer:
+  optimizer: adamw
+  lr: 0.00002
+  wd: 0.001
+  warmup: 500
+  max_epochs: 10
+  milestones:
+    - 4
+    - 7
+  lr_mult: 0.3

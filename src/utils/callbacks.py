@@ -133,16 +133,35 @@ class DatamoduleSummary(Callback):
 
 
     def display_data_stats(self, datamodule):
-        self.console.print("\n")
+        self.console.print()
 
         # Training dataset stats
         train_table = self.create_table()
+        train_datasets = getattr(datamodule, "train_datasets", None) or []
+        train_names = getattr(datamodule, "train_set_names", [])
+        if len(train_datasets) == 0 and isinstance(getattr(datamodule, "train_dataset", None), dict):
+            train_names = datamodule.train_dataset.get("names", [])
+            train_datasets = datamodule.train_dataset.get("datasets", [])
+
+        total_places = sum(int(len(ds)) for ds in train_datasets)
+        total_images = sum(int(getattr(ds, "total_nb_images", 0)) for ds in train_datasets)
+
         train_data = [
-            ("number of cities", str(len(datamodule.train_dataset.cities))),
-            ("number of places", str(datamodule.train_dataset.__len__())),
-            ("number of images", str(datamodule.train_dataset.total_nb_images))
+            ("number of train sets", str(len(train_datasets))),
+            ("number of places", str(total_places)),
+            ("number of images", str(total_images)),
         ]
         self.add_rows("Training dataset stats", train_table, train_data)
+
+        if len(train_datasets) > 0:
+            train_tree_data = {}
+            for i, ds in enumerate(train_datasets):
+                name = train_names[i] if i < len(train_names) else getattr(ds, "dataset_name", f"train_{i}")
+                train_tree_data[name] = [
+                    f"places     {len(ds)}",
+                    f"images     {getattr(ds, 'total_nb_images', 0)}",
+                ]
+            self.add_tree("Training datasets", train_tree_data)
 
         # Validation datasets
         val_tree_data = {
@@ -156,16 +175,18 @@ class DatamoduleSummary(Callback):
 
         # Data configuration
         config_table = self.create_table()
+        iterations = sum(len(ds) for ds in train_datasets) // max(1, datamodule.batch_size) if len(train_datasets) > 0 else 0
         config_data = [
-            ("iterations per epoch", str(datamodule.train_dataset.__len__() // datamodule.batch_size)),
+            ("iterations per epoch", str(iterations)),
             ("train batch size (PxK)", f"{datamodule.batch_size}x{datamodule.img_per_place}"),
             ("training image size", f"{datamodule.train_image_size[0]}x{datamodule.train_image_size[1]}"),
             ("validation image size", f"{datamodule.val_image_size[0]}x{datamodule.val_image_size[1]}")
         ]
         self.add_rows("Data configuration", config_table, config_data)
 
-        self.console.print("\n")
+        self.console.print()
     
+
 
 
 

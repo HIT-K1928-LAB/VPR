@@ -1,0 +1,102 @@
+# ----------------------------------------------------------------------------
+# OT-GaussVLAD + self-attentive Gaussian codebook
+# + OT-anchored refine + uncertainty gate + calibration loss
+# ----------------------------------------------------------------------------
+
+datamodule:
+  train_set_name: "gsv-cities"
+  cities: "all"
+  train_image_size:
+    - 280
+    - 280
+  val_image_size:
+    - 322
+    - 322
+  img_per_place: 4
+  batch_size: 60
+  num_workers: 8
+  val_set_names:
+    - "msls-val"
+    - "pitts30k-val"
+
+backbone:
+  module: src.models.backbones
+  class: DinoV2
+  params:
+    backbone_name: "dinov2_vitb14"
+    num_unfrozen_blocks: 2
+    return_cls_token: false
+
+aggregator:
+  module: src.models.aggregators.ot_gaussvlad_gaussian_query_codebook_ot_anchored_uncertainty
+  class: OTGaussVLADGaussianQueryCodebookOTAnchoredUncertaintyLayer
+  params:
+    in_channels: 768
+    num_clusters: 64
+    cluster_dim: 64
+    hidden_channels: 768
+    score_mode: gmm
+    include_pi_in_scores: false
+    sinkhorn_iters: 3
+    dustbin_mass: 0.05
+    dropout: 0.0
+    mass_preserving: true
+    mass_power: 0.05
+    token_mass_mode: learned
+    token_mass_hidden_channels: 64
+
+    # Self-attentive Gaussian codebook for reference prototypes.
+    gaussian_query_dim: 64
+    gaussian_query_nheads: 8
+    gaussian_self_attn: true
+    gaussian_attn_dropout: 0.0
+    gaussian_mu_scale_init: 0.05
+    gaussian_sigma_scale_init: 0.05
+    gaussian_max_residual_scale: 1.0
+    gaussian_residual_tanh: true
+
+    # OT-anchored image-side Gaussian moment correction.
+    estimate_refine_dim: 64
+    estimate_refine_nheads: 4
+    estimate_refine_dropout: 0.0
+    estimate_refine_mlp_ratio: 2.0
+    estimate_refine_use_ffn: true
+    estimate_refine_delta_tanh: true
+    estimate_refine_mu_scale_init: 0.05
+    estimate_refine_sigma_scale_init: 0.05
+    estimate_refine_max_residual_scale: 1.0
+
+    # Uncertainty gate: high mass + low entropy + low sigma disagreement
+    # allows stronger refinement; uncertain clusters stay close to OT.
+    uncertainty_gate_hidden_dim: 32
+    uncertainty_gate_init: 0.5
+    uncertainty_gate_min: 0.0
+    uncertainty_gate_max: 1.0
+    uncertainty_gate_detach_stats: true
+
+    # Per-forward calibration regularizer. The loss wrapper below controls
+    # the final global weight through calibration_weight.
+    calibration_bce_weight: 1.0
+    calibration_refine_penalty_weight: 1.0
+
+    eps: 1e-6
+
+loss_function:
+  module: src.models.aggregators.ot_gaussvlad_gaussian_query_codebook_ot_anchored_uncertainty
+  class: VPRLossWithAggregatorCalibration
+  params:
+    loss_fn_name: "MultiSimilarityLoss"
+    miner_name: "MultiSimilarityMiner"
+    calibration_weight: 0.02
+
+trainer:
+  optimizer: adamw
+  lr: 0.0002
+  wd: 0.001
+  warmup: 3900
+  max_epochs: 40
+  milestones:
+    - 10
+    - 20
+    - 30
+  lr_mult: 0.1
