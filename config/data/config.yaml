@@ -1,4 +1,18 @@
-
-# this file is used to store the path to datasets used in this framework
-# it is meant to be filled by the download scripts that are provided in the
-# scripts folder
+datasets:
+  train:
+    gsv-cities: /root/code/global/OpenVPRLab/data/train/gsv-cities
+    gsv-cities-light: /root/code/global/OpenVPRLab/data/train/gsv-cities-light
+    msls: /root/code/global/VPR-datasets-downloader/datasets/msls/train
+    SF_XL: /root/code/global/VPR-datasets-downloader/datasets/SF_XL/train
+  val:
+    msls-val: /root/code/global/OpenVPRLab/data/val/msls-val
+    pitts30k-val: /root/code/global/OpenVPRLab/data/val/pitts30k-val
+    pitts30k-test: /root/code/global/OpenVPRLab/data/val/pitts30k-test
+    pitts250k-test: /root/code/global/OpenVPRLab/data/val/pitts250k-test
+    Tokyo247: /root/code/global/VPR-datasets-downloader/datasets/Tokyo247
+    st_lucia: /root/code/global/VPR-datasets-downloader/datasets/st_lucia
+    nordland: /root/code/global/VPR-datasets-downloader/datasets/nordland
+    amstertime: /root/code/global/VPR-datasets-downloader/datasets/amstertime
+    baidu: /root/code/global/VPR-datasets-downloader/datasets/baidu
+    sped: /root/code/global/VPR-datasets-downloader/datasets/sped
+    eynsham: /root/code/global/VPR-datasets-downloader/datasets/eynsham
